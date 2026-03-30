@@ -1,0 +1,61 @@
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+exclude = ["__init__.py"]
+fix = true
+
+[tool.ruff.lint]
+ignore = [
+	"W191",  # indentation contains tabs
+	"B008", # function call in default argument
+]
+select = [
+	"E",  # Pyflakes errors
+	"W",  # Pyflakes warnings
+	"F",  # Pyflakes errors
+	"I",  # isort
+	"C",  # flake8-comprehensions
+	"B",  # flake8-bugbear
+	"UP", # pyupgrade
+	"D",  # pydocstyle
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = true
+
+[tool.pylint.main]
+load-plugins = ["pylint_sqlalchemy"]
+
+[project]
+name = "recommender-services"
+version = "0.1.0"
+description = ""
+authors = [{ name = "Shahan M Iqbal", email = "mehtabi@clemson.edu" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+	"pandas",
+	"numpy",
+	"lenskit==0.14.4",
+	"boto3",
+	"binpickle",
+	"fastapi",
+	"mangum",
+	"uvicorn",
+	"annoy",
+	"pydantic",
+	"structlog>=25.4.0",
+]
+
+[project.optional-dependencies]
+dev = ["dotenv>=0.9.9", "ruff>=0.14.1"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["rssa_recommender"]
+
