@@ -5,8 +5,11 @@ import logging
 from typing import Any, Callable, Union
 
 from rssa_recommender.common.schemas import MovieLensRating
+from rssa_recommender.core.interfaces import RecommenderServiceProtocol
 
 log = logging.getLogger(__name__)
+
+RouteHandler = Callable[[RecommenderServiceProtocol, dict[str, Any]], dict[str, Any]]
 
 
 class BaseLambdaHandler:
@@ -15,7 +18,7 @@ class BaseLambdaHandler:
     Handles event parsing, error catching, and routing.
     """
 
-    def __init__(self, service: Any, routes: dict[str, Callable]):
+    def __init__(self, service: Any, routes: dict[str, RouteHandler]):
         """Initializes the handler with a service and routing map.
 
         Args:
@@ -53,18 +56,14 @@ class BaseLambdaHandler:
             log.info(f'Received request for path: {path}')
 
             user_id = payload.get('user_id')
-            limit = payload.get('limit') or 10
 
             if not user_id:
                 return {'statusCode': 400, 'body': json.dumps({'error': 'Missing user_id'})}
 
-            ratings_data = payload.get('ratings', [])
-            ratings = [MovieLensRating(**r) for r in ratings_data]
-
             ctx = {
-                'user_id': user_id,
-                'ratings': ratings,
-                'limit': limit,
+                'user_id': str(user_id),
+                'ratings': [MovieLensRating(**r) for r in payload.get('ratings', [])],
+                'limit': int(payload.get('limit') or 10),
                 'raw_payload': payload,
             }
 
