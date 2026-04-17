@@ -5,11 +5,7 @@ import os
 
 from rssa_recommender.common.logging_config import setup_logging
 from rssa_recommender.core.handler import BaseLambdaHandler
-from rssa_recommender.core.standard_adapters import (
-    handle_diverse_community_score,
-    handle_reference_community_score,
-    handle_top_n,
-)
+from rssa_recommender.core.interfaces import RecommenderServiceProtocol
 from rssa_recommender.services.biased_mf_recs.service import BiasedMFRecsService
 
 setup_logging()
@@ -24,10 +20,28 @@ recs_service = BiasedMFRecsService(asset_root=ASSET_ROOT, asset_bundle_key=MODEL
 
 log.info('Service initialized.')
 
+
+def route_community_scores(service: RecommenderServiceProtocol, ctx: dict) -> dict:
+    raw = ctx['raw_payload']
+    results = service.predict_with_community_scores(
+        user_id=ctx['user_id'],
+        ratings=ctx['ratings'],
+        limit=ctx['limit'],
+        ave_score_type=raw.get('ave_score_type', 'nn_predicted'),
+        method=raw.get('method', 'fishnet + single_linkage'),
+    )
+    return {'response_type': 'community_comparison', 'items': results}
+
+
+def route_top_n(service: RecommenderServiceProtocol, ctx: dict) -> dict:
+    results = service.predict_top_n(user_id=ctx['user_id'], ratings=ctx['ratings'], limit=ctx['limit'])
+
+    return {'response_type': 'standard', 'items': results}
+
+
 routes = {
-    'diverse_community_score': handle_diverse_community_score,
-    'reference_community_score': handle_reference_community_score,
-    'top_n': handle_top_n,
+    'community_scored_predictions': route_community_scores,
+    'top_n': route_top_n,
 }
 
 handler = BaseLambdaHandler(recs_service, routes)

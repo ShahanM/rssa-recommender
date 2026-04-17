@@ -82,8 +82,7 @@ class BiasedMFRecsService(RSSABase):
             if user_features is None:
                 raise RuntimeError('User featuers not trained in the model.')
 
-            search_space_k = 200
-
+            search_space_k = 500
             annoy_index, _ = self._load_annoy_assets()
             nn_ids: list[int] = annoy_index.get_nns_by_vector(user_features, search_space_k, include_distances=False)
             del annoy_index
@@ -133,18 +132,18 @@ class BiasedMFRecsService(RSSABase):
         # Add Biases (Global + User + Item)
         # Note: We use the term 'bias' as per LensKit terminology (intercepts)
         if hasattr(self.model, 'global_bias_'):
-            Pred_Matrix += self.model.global_bias_
+            Pred_Matrix += self.model.global_bias_  # type: ignore
 
             # Map internal codes -> external user IDs to look up biases
             if hasattr(self.model, 'user_index_') and hasattr(self.model, 'user_biases_'):
                 neighbor_external_ids = self.model.user_index_[neighbor_internal_codes]
-                neighbor_biases = self.model.user_biases_.reindex(neighbor_external_ids).values
+                neighbor_biases = self.model.user_biases_.reindex(neighbor_external_ids).values  # type: ignore
 
                 # Broadcast: (n_neighbors, 1) to add to each row
                 Pred_Matrix += neighbor_biases[:, np.newaxis]
 
             if hasattr(self.model, 'item_biases_'):
-                target_item_biases = self.model.item_biases_.reindex(valid_item_ids).values
+                target_item_biases = self.model.item_biases_.reindex(valid_item_ids).values  # type: ignore
                 # Broadcast: (1, n_targets) to add to each column
                 Pred_Matrix += target_item_biases[np.newaxis, :]
 
@@ -153,86 +152,26 @@ class BiasedMFRecsService(RSSABase):
         p_nn_ave_df.index.name = 'item'
         return p_nn_ave_df.reset_index()
 
-    def predict_diverse_items(
+    def predict_with_community_scores(
         self,
         user_id: str,
         ratings: list[MovieLensRating],
         limit: int,
         **kwargs,
     ) -> list[dict]:
-        """Generate diverse recommended items for preference visualization.
-
-        Args:
-            ratings: User ratings.
-            limit: Number of recommendations to generate.
-            user_id: User identifier.
-            **kwargs: Additional arguments for diversity algorithms.
-            # algo: Diversity algorithm to use. Defaults to 'fishnet'.
-            # init_sample_size: Initial sample size for diversity algorithms. Defaults to 500.
-            # min_rating_count: Minimum rating count for items. Defaults to 50.
-
-        Returns:
-            List of recommended preference visualization items.
-        """
-        log.info(f'Diverse N limit = {limit}')
-        ratedset = tuple([r.item_id for r in ratings])
-        seed = hash(ratedset) % (2**32)
-        np.random.seed(seed)  # Set the NumPy seed for repeatable sampling/shuffling
-
-        candidates = self.get_candidates(user_id, ratings, 'global')
-        diverse_items: pd.DataFrame = candidates.copy()
-
-        method = kwargs.get('method', 'fishnet + single_linkage')
-
-        diverse_items = self._compute_community_score(diverse_items, method, **kwargs)
-
-        n_default = min(limit, len(diverse_items))
-        diverse_items = diverse_items.head(n_default)
-
-        scaled_items = self.scale_and_label(diverse_items)
-
-        return scaled_items.to_dict(orient='records')
-
-    def predict_reference_items(
-        self,
-        user_id: str,
-        ratings: list[MovieLensRating],
-        limit: int,
-        **kwargs,
-    ) -> list[dict]:
-        """Generate reference items using neighborhood predicted scores.
-
-        1. Get candidates with neighborhood predicted average scores.
-        2. Apply fishingnet sampling to get diverse items.
-        3. Apply single linkage clustering to select final recommendations.
-
-        Args:
-            ratings: User ratings.
-            limit: Number of recommendations to generate.
-            user_id: User identifier.
-            **kwargs: Additional arguments.
-            # init_sample_size: Initial sample size for fishingnet. Defaults to 500.
-            # min_rating_count: Minimum rating count for items. Defaults to 50.
-
-        Returns:
-            List of recommended preference visualization items.
-        """
+        """Generate community scored preference items."""
         log.info(f'Reference N limit = {limit}')
-
         ratedset = tuple([r.item_id for r in ratings])
         seed = hash(ratedset) % (2**32)
-        np.random.seed(seed)  # Set the NumPy seed for repeatable sampling/shuffling
-
-        candidates = self.get_candidates(user_id, ratings, 'nn_predicted')
+        np.random.seed(seed)
+        ave_score_type = kwargs.pop('ave_score_type', 'nn_predicted')
+        candidates = self.get_candidates(user_id, ratings, ave_score_type=ave_score_type)
         diverse_items: pd.DataFrame = candidates.copy()
 
-        method = kwargs.get('method', 'fishnet + single_linkage')
-
+        method = kwargs.pop('method', 'fishnet + single_linkage')
         diverse_items = self._compute_community_score(diverse_items, method, **kwargs)
-
         n_default = min(limit, len(diverse_items))
         diverse_items = diverse_items.head(n_default)
-
         scaled_items = self.scale_and_label(diverse_items)
 
         return scaled_items.to_dict(orient='records')
@@ -353,12 +292,9 @@ class BiasedMFRecsService(RSSABase):
         except Exception as e:
             # Handle the edge case where points are perfectly collinear (rare, but possible)
             log.warning(f'ConvexHull computation failed (collinearity): {e}')
-            return candidates.head()  # Return a small set of candidates as a fallback
+            return candidates.head()
 
-        # hull.vertices contains the indices of the points that form the hull's boundary.
         hull_indices = hull.vertices
-
-        # Use the indices to select the corresponding rows from the candidates DataFrame
         extreme_items = candidates.iloc[hull_indices].copy()
 
         log.info(f'Convex Hull analysis found {len(extreme_items)} extreme items.')
@@ -381,30 +317,19 @@ class BiasedMFRecsService(RSSABase):
         if candidates.empty:
             return candidates
 
-        # Extract the (score, ave_score) feature space
         X = candidates[['score', 'ave_score']].values
-
         # Assume scale_grid returns a list of N coordinates: [(x1, y1), (x2, y2), ...]
         grid_points = self.scale_grid(minval=1, maxval=5, num_divisions=int(np.sqrt(limit)))
-
-        # Use a boolean mask to track which candidates have already been selected
         is_selected = np.zeros(len(candidates), dtype=bool)
 
         selected_items_list = []
-
-        # Greedy Search Loop (Iterate over the N grid points)
         for point in grid_points:
-            # Calculate Manhattan distance from *every unselected candidate* to the grid point
-            # np.abs(X - point) gives the 2D distance for every item to the point
             dist_to_point = np.sum(np.abs(X - point), axis=1)
-
-            # Apply the selection mask to restrict search to unselected items
             current_distances = dist_to_point.copy()
             current_distances[is_selected] = np.inf  # Ignore already selected items
 
-            # Find the index of the closest UNSELECTED item
             if np.all(is_selected):
-                break  # Stop if all items have been selected
+                break
 
             idx_closest_candidate = np.argmin(current_distances)
 
@@ -434,7 +359,6 @@ class BiasedMFRecsService(RSSABase):
 
         X = candidates[['score', 'ave_score']].values
 
-        # Uses fast C/Fortran code to calculate distances and build the linkage matrix.
         linkage_matrix = linkage(X, method='single', metric='cityblock')
 
         # To form N clusters, we cut the dendrogram at a distance such that N clusters remain.
@@ -444,25 +368,18 @@ class BiasedMFRecsService(RSSABase):
 
         candidates['cluster'] = cluster_labels
 
-        # Select one item per cluster.
         final_items = []
 
         for i in range(1, num_clusters + 1):
             cluster_df = candidates[candidates['cluster'] == i].copy()
 
             if not cluster_df.empty:
-                # Find the center/centroid of the cluster for selection
                 mid_score = cluster_df['score'].mean()
                 mid_ave = cluster_df['ave_score'].mean()
-
-                # Calculate Manhattan distance from the mean center to find the closest item
                 cluster_df['dist_to_center'] = np.abs(cluster_df['score'] - mid_score) + np.abs(
                     cluster_df['ave_score'] - mid_ave
                 )
-
-                # Select the item closest to the cluster center as the representative
                 representative_item = cluster_df.sort_values(by='dist_to_center', ascending=True).iloc[0]
-
                 final_items.append(representative_item)
 
         return pd.DataFrame(final_items)
@@ -502,7 +419,6 @@ class BiasedMFRecsService(RSSABase):
 
         scaled_items.rename(columns={'ave_score': 'community_score'}, inplace=True)
 
-        # Recalculate global_avg based on the SCALED values
         global_avg = np.mean([np.median(scaled_items['community_score']), np.median(scaled_items['score'])])
 
         def label(row_score):
@@ -510,7 +426,6 @@ class BiasedMFRecsService(RSSABase):
 
         scaled_items['community_label'] = np.where(scaled_items['community_score'] > global_avg, 1, 0)
         scaled_items['label'] = np.where(scaled_items['score'] > global_avg, 1, 0)
-
         scaled_items['cluster'] = scaled_items['cluster'].astype('int32') if 'cluster' in scaled_items else 0
 
         return scaled_items
