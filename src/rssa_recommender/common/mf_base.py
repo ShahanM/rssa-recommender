@@ -153,7 +153,7 @@ class RSSABase:
 
             if history_tuples:
                 for item_id, rating in history_tuples:
-                    if str(item_id) == str(target_item):
+                    if item_id == target_item:
                         ratings.append(rating)
                         break
 
@@ -163,7 +163,7 @@ class RSSABase:
         del history_lookup_map
         return np.mean(ratings)
 
-    def _get_target_item_factors(self, item_ids: list[int]) -> tuple[np.ndarray, list]:
+    def _get_target_item_factors(self, item_ids: list[int]) -> tuple[np.ndarray, list[int]]:
         """Retrieves the Q (item factor) matrix subset corresponding to the list of item UUIDs.
 
         Args:

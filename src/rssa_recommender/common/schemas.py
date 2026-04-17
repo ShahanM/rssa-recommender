@@ -20,11 +20,14 @@ class RecommendationRequestPayloadSchema(BaseModel):
     n: int
 
 
+MovieLensID = int
+
+
 class RecommendationResponsePayloadSchema(BaseModel):
     """Response payload consisting of recommendations."""
 
     user_id: str
-    recommendations: list[int]  # list of movielens_ids
+    recommendations: list[MovieLensID]
 
 
 class PrefVizItem(BaseModel):
@@ -32,9 +35,9 @@ class PrefVizItem(BaseModel):
 
     item_id: str
     community_score: float
-    user_score: float
+    score: float
     community_label: int
-    user_label: int
+    label: int
     cluster: int
     title: Optional[str] = None
 

@@ -27,7 +27,6 @@ def setup_logging():
             force=True,
         )
 
-        # Set up structlog processors
         processors = [
             structlog.stdlib.add_log_level,
             structlog.stdlib.add_logger_name,
