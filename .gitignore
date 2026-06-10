@@ -11,3 +11,8 @@ __pycache__/
 node_modules
 package-lock.json
 .DS_Store
+*.egg-info/
+notes/
+data/
+.aws-sam/
+.secret

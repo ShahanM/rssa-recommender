@@ -1,0 +1,17 @@
+FROM public.ecr.aws/lambda/python:3.9
+
+RUN yum install -y gcc-c++ && \
+    yum clean all && \
+    rm -rf /var/cache/yum
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+COPY requirements.in .
+COPY pyproject.toml .
+
+COPY . .
+RUN uv pip install --system -e .
+
+CMD ["uvicorn", "scripts.local_dev_server:app", "--host", "0.0.0.0", "--port", "5000", "--reload"]
