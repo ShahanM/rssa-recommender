@@ -16,15 +16,11 @@ def get_and_unzip_resource(bucket_name: str, zip_file_key: str, extract_dir_name
     """Downloads a zip file from S3 and extacts it to a local directory.
 
     Checks if the directory is already populated to avoid re-work.
-
-    Args:
-            bucket_name: The name of the S3 bucket.
-            zip_file_key: The S3 key for the zip file.
-            extract_dir_name: The local directory to extract files into.
-
-    Raises:
-            Exception: If download or extraction fails.
     """
+    if not bucket_name:
+        print(f'Skipping S3 download for {zip_file_key} - No bucket provided.')
+        return
+
     marker_file = os.path.join(extract_dir_name, '.unzipped_complete')
     if os.path.exists(marker_file):
         log.info(f'Resources already unzipped in {extract_dir_name}.')

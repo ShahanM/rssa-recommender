@@ -1,0 +1,11 @@
+annoy
+pyarrow==14.0.2
+pandas
+numpy<2.0
+lenskit==0.14.4
+binpickle
+boto3
+scipy
+pydantic
+structlog>=25.4.0
+scikit-learn

@@ -31,7 +31,7 @@ docstring-code-format = true
 load-plugins = ["pylint_sqlalchemy"]
 
 [project]
-name = "recommender-services"
+name = "rssa-recommender"
 version = "0.1.0"
 description = ""
 authors = [{ name = "Shahan M Iqbal", email = "mehtabi@clemson.edu" }]
@@ -49,7 +49,10 @@ dependencies = [
 	"uvicorn",
 	"annoy",
 	"pydantic",
+	"fastparquet",
 	"structlog>=25.4.0",
+	"joblib>=1.5.3",
+	"scikit-learn>=1.6.1",
 ]
 
 [project.optional-dependencies]
@@ -58,4 +61,3 @@ dev = ["dotenv>=0.9.9", "ruff>=0.14.1"]
 [tool.setuptools]
 package-dir = {"" = "src"}
 packages = ["rssa_recommender"]
-

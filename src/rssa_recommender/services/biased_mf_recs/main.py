@@ -1,7 +1,8 @@
 """Lambad handler for the BiasedMF recommendations."""
 
-import logging
 import os
+
+import structlog
 
 from rssa_recommender.common.logging_config import setup_logging
 from rssa_recommender.core.handler import BaseLambdaHandler
@@ -9,19 +10,20 @@ from rssa_recommender.core.interfaces import RecommenderServiceProtocol
 from rssa_recommender.services.biased_mf_recs.service import BiasedMFRecsService
 
 setup_logging()
-log = logging.getLogger(__name__)
+log = structlog.getLogger(__name__)
 
-log.info('Cold start... initializing BiasedMFRecsService.')
+log.info('Initializing BiasedMFRecsService.')
 
 ASSET_ROOT = os.environ.get('MODEL_FOLDER_PATH', 'ml32m')
 MODEL_ASSET_BUNDLE_KEY = os.environ.get('BIASED_RS_ASSET_BUNDLE_KEY', 'biased_als_ml32m_bundle.zip')
 
 recs_service = BiasedMFRecsService(asset_root=ASSET_ROOT, asset_bundle_key=MODEL_ASSET_BUNDLE_KEY)
 
-log.info('Service initialized.')
+log.info('Biased MF Service initialized.')
 
 
 def route_community_scores(service: RecommenderServiceProtocol, ctx: dict) -> dict:
+    """Generates diversified recommendations in the Community Comarison format."""
     raw = ctx['raw_payload']
     results = service.predict_with_community_scores(
         user_id=ctx['user_id'],
@@ -34,7 +36,12 @@ def route_community_scores(service: RecommenderServiceProtocol, ctx: dict) -> di
 
 
 def route_top_n(service: RecommenderServiceProtocol, ctx: dict) -> dict:
-    results = service.predict_top_n(user_id=ctx['user_id'], ratings=ctx['ratings'], limit=ctx['limit'])
+    """Generates Top N item from the Biased MF model."""
+    results = service.predict_top_n(
+        user_id=ctx['user_id'],
+        ratings=ctx['ratings'],
+        limit=ctx['limit'],
+    )
 
     return {'response_type': 'standard', 'items': results}
 
